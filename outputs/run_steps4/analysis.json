@@ -1,0 +1,134 @@
+{
+  "n_prompts": 500,
+  "K": 4,
+  "all_candidates": 2000,
+  "score_distributions": {
+    "image_reward_all": {
+      "mean": 0.9631,
+      "P10": -0.291,
+      "P25": 0.4597,
+      "P50": 1.1547,
+      "P75": 1.6777,
+      "P90": 1.8858
+    },
+    "image_reward_top1": {
+      "mean": 1.2857,
+      "P10": 0.331,
+      "P25": 0.928,
+      "P50": 1.5377,
+      "P75": 1.8316,
+      "P90": 1.9326
+    },
+    "pickscore_all": {
+      "mean": 22.3121,
+      "P10": 20.7195,
+      "P25": 21.493,
+      "P50": 22.3071,
+      "P75": 23.1573,
+      "P90": 23.9064
+    },
+    "pickscore_top1": {
+      "mean": 22.4636,
+      "P10": 20.9583,
+      "P25": 21.6625,
+      "P50": 22.4069,
+      "P75": 23.2895,
+      "P90": 23.9777
+    }
+  },
+  "selqual_by_threshold": [
+    {
+      "threshold_percentile": 10,
+      "threshold_value": 20.7195,
+      "selqual": 0.94,
+      "good": 470,
+      "total": 500,
+      "accrate": 1.0
+    },
+    {
+      "threshold_percentile": 20,
+      "threshold_value": 21.2689,
+      "selqual": 0.848,
+      "good": 424,
+      "total": 500,
+      "accrate": 1.0
+    },
+    {
+      "threshold_percentile": 25,
+      "threshold_value": 21.493,
+      "selqual": 0.8,
+      "good": 400,
+      "total": 500,
+      "accrate": 1.0
+    },
+    {
+      "threshold_percentile": 30,
+      "threshold_value": 21.6596,
+      "selqual": 0.752,
+      "good": 376,
+      "total": 500,
+      "accrate": 1.0
+    },
+    {
+      "threshold_percentile": 40,
+      "threshold_value": 21.9597,
+      "selqual": 0.642,
+      "good": 321,
+      "total": 500,
+      "accrate": 1.0
+    },
+    {
+      "threshold_percentile": 50,
+      "threshold_value": 22.3071,
+      "selqual": 0.534,
+      "good": 267,
+      "total": 500,
+      "accrate": 1.0
+    },
+    {
+      "threshold_percentile": 60,
+      "threshold_value": 22.6355,
+      "selqual": 0.446,
+      "good": 223,
+      "total": 500,
+      "accrate": 1.0
+    },
+    {
+      "threshold_percentile": 70,
+      "threshold_value": 22.9627,
+      "selqual": 0.344,
+      "good": 172,
+      "total": 500,
+      "accrate": 1.0
+    },
+    {
+      "threshold_percentile": 75,
+      "threshold_value": 23.1573,
+      "selqual": 0.286,
+      "good": 143,
+      "total": 500,
+      "accrate": 1.0
+    },
+    {
+      "threshold_percentile": 80,
+      "threshold_value": 23.3508,
+      "selqual": 0.222,
+      "good": 111,
+      "total": 500,
+      "accrate": 1.0
+    },
+    {
+      "threshold_percentile": 90,
+      "threshold_value": 23.9064,
+      "selqual": 0.11,
+      "good": 55,
+      "total": 500,
+      "accrate": 1.0
+    }
+  ],
+  "timing": {
+    "total_wall_clock_sec": 436.6,
+    "total_generation_sec": 150.0,
+    "total_scoring_sec": 71.5
+  }
+}

@@ -1,0 +1,11 @@
+# Generated images (~700MB per run, too large for git)
+outputs/*/images/
+# Logs
+logs/
+
+# Python
+__pycache__/
+*.pyc
+
+# Slurm logs
+slurm-*.out

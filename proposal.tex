@@ -1,0 +1,341 @@
+\documentclass[twocolumn,11pt]{article}
+
+% Packages
+\usepackage{natbib}      % For bibliography management
+\usepackage{graphicx}    % For including graphicssymbols and equations
+\usepackage{geometry}    % To adjust page margins
+\usepackage{hyperref}    % For hyperlinks in the document
+\usepackage{times}
+\usepackage[switch]{lineno}      % For line numbers
+
+% Set the page geometry
+\geometry{a4paper, margin=0.82in}
+% \usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm,bbm}
+
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{multirow}
+\usepackage{xcolor}
+\newcommand{\TODO}[1]{\textcolor{red}{\textbf{TODO:} #1}}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\setstretch{0.98}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue
+}
+
+\titleformat{\section}{\large\bfseries}{\thesection.}{0.2em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection.}{0.15em}{}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+
+\newcommand*{\eg}{\emph{e.g.}{}}
+\newcommand*{\ie}{\emph{i.e.}{}}
+\newcommand{\X}{\mathcal{X}} % context
+\newcommand{\Y}{\mathcal{Y}} % objective parameter
+\newcommand{\I}{\mathcal{I}} % objective
+\newcommand{\Z}{\mathcal{Z}} % decision
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\R}{\mathbb{R}}
+\renewcommand{\P}{\mathbb{P}}
+\newcommand{\PP}{\mathbb{P}}
+\newcommand{\RR}{\mathbb{R}}
+% Notation
+\DeclareMathOperator*{\argmax}{argmax}
+\DeclareMathOperator*{\argmin}{argmin}
+\DeclareMathOperator*{\minimize}{minimize}
+
+
+\newenvironment{minxing}
+{\par\begingroup\color{brown}\noindent\textbf{[Minxing]: }\ignorespaces}
+  {\par\endgroup}
+
+\newcommand{\mx}[1]{\textcolor{brown}{[Minxing]: #1}}
+
+% Begin Document
+\begin{document}
+
+% Title
+\title{Knowing When to Generate: Selective Generation with \\Conformal Abstention for Human Preference Alignment}
+\author{Minxing Zheng\thanks{Equal contribution} \& Shahriar Noroozizadeh\footnotemark[1] \& Tianyang Zhou\footnotemark[1]\\
+10-x23 Generative AI Course Project}
+\date{}
+\maketitle
+
+\linenumbers
+
+\begin{abstract}
+Text-to-image models often generate misaligned or low-quality outputs, yet current systems lack the ability to abstain. We propose a selective generation framework that allows models to withhold unsatisfactory results. By scoring candidates with a human-preference reward model and calibrating an acceptance threshold via conformal prediction, our method introduces a plug-and-play reliability layer. This provides a formal, distribution-free guarantee that returned images meet user-defined quality standards without requiring any model retraining.
+\end{abstract}
+
+
+\section{Introduction}
+
+Text-to-image diffusion models such as Stable Diffusion \citep{rombach2022high} and SDXL \citep{podell2023sdxl} can produce visually striking images from natural language prompts. Yet despite rapid progress, these models routinely generate outputs that are misaligned with the prompt, contain visual artifacts, or are simply not preferred by humans \citep{xu2023imagereward, kirstain2023pick}. In current deployments the generator must always return an image, so even when every sampled candidate is poor the user still receives one. A more reliable system would have the option to \emph{abstain}---to say ``I cannot produce a satisfactory image for this prompt''---rather than deliver a low-quality result.
+We study this problem through the lens of \textbf{selective generation}. Given a prompt $x$, a base generator produces $K$ candidate images and a pretrained reward model scores each candidate for prompt--image alignment and perceptual quality. The system returns the top-scoring candidate only if its score exceeds a calibrated threshold; otherwise it abstains. The central technical question is how to set this threshold so that the accepted outputs come with a formal quality guarantee.
+
+Our key idea is to apply \textbf{conformal prediction} \citep{vovk2005algorithmic, angelopoulos2023conformal} to calibrate the acceptance threshold. Conformal prediction is a distribution-free framework to construct prediction sets and control risk with finite-sample guarantees, requiring only exchangeability of the calibration data. By defining a nonconformity score based on the negative reward, we obtain a threshold from a held-out calibration set such that, among the prompts on which the system does not abstain, the probability that the returned image satisfies a human-preference quality criterion is at least \(1-\alpha\), for a user-specified \(\alpha\in(0,1)\).
+
+This framing connects two lines of work that have not been combined in the text-to-image setting: ($i$) reward-model-based evaluation and ranking of generated images \citep{xu2023imagereward, kirstain2023pick, wu2023human}, and ($ii$) conformal calibration for selective prediction and risk control \citep{angelopoulos2022conformal, geifman2017selective}. Our contribution is not a new  architecture but rather a principled \emph{reliability layer} that wraps around any generator and scorer pair, providing interpretable, distribution-free guarantees on the quality of delivered outputs.
+
+
+
+% Modern text-to-image models can generate visually impressive images, but they still often produce outputs that are poorly aligned with the prompt, visually implausible, or simply not preferred by humans. In many settings, always returning an image is undesirable: the system should instead have the option to \emph{abstain} when it is not confident that the generated output is good enough.
+
+% In this project, we propose a \textbf{selective generation} framework for text-to-image models. Given a prompt $x$, a base text-to-image model generates several candidate images. A reward model then scores these candidates, and the system returns the top candidate only if its score is sufficiently high; otherwise, it rejects the prompt and outputs nothing. Our main idea is to use \textbf{conformal calibration} to choose this acceptance threshold in a principled way.
+% \TODO{Add literature for conformal prediction paper, text-to-image generative model quality or more general generative model quality issue, and abstention in generative model and LLM, RLHF ? }
+
+\section{Related Work}
+\paragraph{Text-to-image synthesis and human preference modeling.}
+Latent diffusion models (LDMs) \citep{rombach2022high,zhang2023adding,ruiz2023dreambooth} and scaled architectures like SDXL \citep{podell2023sdxl} have become standard base generators for high-resolution image synthesis. However, evaluating their outputs using traditional metrics such as FID or CLIP score correlates poorly with human judgments \citep{jayasumana2024rethinking}. To close this gap, several works have trained reward models directly on human preference data. For example, ImageReward \citep{xu2023imagereward} pioneered general-purpose text-to-image preference modeling, while PickScore \citep{kirstain2023pick} and Human Preference Score v2 (HPS~v2) \citep{wu2023human} leveraged large-scale user datasets and high-quality annotations to achieve superhuman prediction accuracy and robust generalization. In our framework, these open generative models serve as the backbone, while the preference reward models play a dual role: acting both as the selection scorer to rank candidates and as a proxy for ground-truth quality during evaluation.
+% \paragraph{Text-to-image generation.}
+% Latent diffusion models (LDMs) \citep{rombach2022high,zhang2023adding,ruiz2023dreambooth} enabled efficient high-resolution image synthesis by operating in the latent space of a pretrained autoencoder, and SDXL \citep{podell2023sdxl} scaled this architecture with a larger UNet backbone and dual text encoders to achieve quality competitive with proprietary systems. These open models are now standard base generators for downstream applications and form the backbone of our experimental pipeline.
+
+% \paragraph{Human preference modeling for generated images.}
+% Evaluating text-to-image outputs with metrics such as FID or CLIP score correlates poorly with human judgments. To close this gap, several works have trained reward models on human preference data. ImageReward \citep{xu2023imagereward} was the first general-purpose text-to-image preference model, trained on 137k expert comparisons and shown to substantially outperform CLIP-based scoring. PickScore \citep{kirstain2023pick} was trained on the large-scale Pick-a-Pic dataset of real user preferences and demonstrated superhuman accuracy in predicting which of two images a user would prefer. Human Preference Score v2 (HPS~v2) \citep{wu2023human} further improved generalization across generators by collecting higher-quality annotations. In our framework these reward models serve a dual role: as the selection scorer that ranks candidates and as a proxy for ground-truth quality during evaluation.
+
+\paragraph{Conformal prediction and risk control.}
+Conformal prediction \citep{vovk2005algorithmic, shafer2008tutorial} provides distribution-free, finite-sample coverage guarantees for prediction sets, requiring only data exchangeability. Angelopoulos and Bates \citep{angelopoulos2023conformal} give a modern tutorial. The framework has been extended well beyond set prediction: conformal risk control \citep{angelopoulos2022conformal} generalizes the guarantee to the expected value of any monotone loss, with applications in computer vision and NLP. Learn Then Test \citep{angelopoulos2025learn} provides analogous guarantees in high probability. These extensions are directly relevant to our setting, where we wish to control the rate of low-quality outputs among the images that the system chooses to return.
+
+\paragraph{Selective prediction and abstention.}
+Selective classification, allowing a model to abstain on uncertain inputs in exchange for lower error on the accepted subset, has a long history \citep{chow1957optimum, el2010foundations}. \citet{geifman2017selective} brought selective prediction to deep neural networks by thresholding the softmax response, and later introduced SelectiveNet \citep{geifman2019selectivenet}, which jointly optimizes classification and rejection. More recently, conformal ideas have been combined with selective prediction in NLP: \citet{yadkori2024mitigating} use conformal calibration to decide when an LLM should abstain rather than hallucinate, achieving rigorous control of the hallucination rate. Our work adapts this abstention-via-conformal-calibration paradigm to text-to-image generation setting, where the ``response'' is an image and the quality signal comes from a learned reward model rather than a self-consistency check.
+
+\section{Problem Setup and Method}
+\subsection{Problem Setup}
+
+We now formalize the task and introduce the notation. Let $X$ denote the input random variable, for example a text prompt, and let $x$ be a realized prompt. Let $G(\cdot \mid x)$ be a conditional image generator. Given $x$, the generator produces $K$ candidate images
+\[
+I_1(x),\dots,I_K(x) \sim G(\cdot \mid x).
+\]
+The goal is to return a high-quality image for the user.
+
+Because text-to-image models are stochastic, generating multiple candidates for the same prompt is natural and induces a selection problem. We assume access to a pretrained reward model \(S(x,I)\) that scores image \(I\) under prompt \(x\), reflecting prompt alignment or perceptual quality. A natural baseline is to return the highest-scoring candidate,
+\[
+I^*(x)=\arg\max_{k=1,\dots,K} S\bigl(x,I_k(x)\bigr).
+\]
+While this ranking rule is natural, it does not address the case where all generated candidates are poor. In such cases, even the top-scoring image may be unsatisfactory. This motivates an abstention option: rather than always returning \(I^*(x)\), the system should reject when the selected image is not sufficiently reliable.
+
+To formalize this idea, we let $Y(x,I)\in\{0,1\}$
+denote the latent quality label of image $I$ under prompt $x$, where $Y(x,I)=1$ indicates that the image is acceptable and $Y(x,I)=0$ otherwise. More generally, $Y(x,I)$ may also be taken to be a scalar-valued human preference or quality score. Our objective is to design a decision rule that returns an image only when its quality is sufficiently high, and abstains otherwise. Accordingly, the final output of the selective generation system is defined as
+\[
+\hat{f}(x)=
+\begin{cases}
+I^*(x), & \text{if } R(x)=1,\\
+\texttt{ABSTAIN}, & \text{if } R(x)=0,
+\end{cases}
+\]
+where
+\[
+R(x)=\mathbf{1}\{S(x,I^*(x))\ge \tau\}\in\{0,1\}
+\]
+denotes the accept--reject decision for the selected image. Here $\tau$ is a calibrated threshold obtained from held-out calibration data.
+
+\subsection{Conformal risk calibration}
+Our goal is to construct a selective generation rule with a probabilistic quality guarantee. Specifically, for a user-specified risk level $\alpha \in (0,1)$ and confidence level $\delta \in (0,1)$, we seek a threshold such that, with probability at least $1-\delta$ over the calibration data, the selective error among accepted outputs is at most $\alpha$. Equivalently, we aim to guarantee
+\begin{equation}
+\label{eq:target_coverage}
+\mathbb{P}\!\left(
+\mathbb{P}\bigl(Y(x,I^*(x))=0 \mid R(x)=1\bigr)\le \alpha
+\right)\ge 1-\delta.
+\end{equation}
+That is, among the images that are not abstained, at most an $\alpha$ fraction fail to satisfy the desired human-preference-based quality criterion, with confidence at least $1-\delta$.
+
+We use a conformal-style calibration procedure to choose such a threshold \(\tau\). Using a held-out calibration set
+\begin{align*}
+&\{(X_i,I^*(X_i),S_i,Y_i)\}_{i=1}^n, \text{ where }
+\\
+&S_i=S(X_i,I^*(X_i)), \; \;
+Y_i=Y(X_i,I^*(X_i))\in\{0,1\},
+\end{align*}
+we treat \(Y_i=0\) as an error. For any threshold \(t\), define
+\[
+A(t)=\sum_{i=1}^n \mathbf 1\{S_i\ge t\},
+\;\;\;
+E(t)=\sum_{i=1}^n \mathbf 1\{S_i\ge t\}(1-Y_i),
+\]
+so that the empirical selective risk is \(E(t)/A(t)\) whenever \(A(t)>0\). We then select \(\hat\tau\) by sweeping over a grid of candidate thresholds and choosing the most permissive threshold whose upper confidence bound on the selective risk remains below \(\alpha\); see Algorithm~\ref{alg:threshold_calibration} for details.
+
+\begin{algorithm}[!tbh]
+\caption{Threshold calibration for selective generation}
+\label{alg:threshold_calibration}
+\begin{algorithmic}[1]
+\Require Calibration data $\{(S_i,Y_i)\}_{i=1}^n$, risk level $\alpha$, confidence level $\delta$, thresholds $\mathcal T=\{t_1>\cdots>t_M\}$
+\State $\hat\tau \gets t_M$
+\For{$m=1,\dots,M$}
+    \State $A \gets \sum_{i=1}^n \mathbf{1}\{S_i\ge t_m\}$
+    \State $E \gets \sum_{i=1}^n \mathbf{1}\{S_i\ge t_m\}(1-Y_i)$
+    \If{$A>0$ \textbf{and} $\dfrac{E}{A}+\sqrt{\dfrac{\log(M/\delta)}{2A}}>\alpha$}
+        \State $\hat\tau \gets \begin{cases}
+        +\infty, & m=1,\\
+        t_{m-1}, & m>1,
+        \end{cases}$
+        \State \textbf{break}
+    \EndIf
+\EndFor
+\State \Return $\hat\tau$
+\end{algorithmic}
+\end{algorithm}
+
+\section{Experimental Details}
+
+%\TODO{Models used, baseline mehtods etc}
+%\mx{might be helpful for model:} 
+We will optionally use the prompts from Pick-a-Pic to generate our own candidate images using an open text-to-image model such as Stable Diffusion or SDXL-Turbo. For evaluation, we will additionally consider external preference scorers such as \textbf{ImageReward} or \textbf{HPS v2}, so that the model used for acceptance is not exactly the same as the model used for final evaluation.
+
+
+
+\subsection{Baseline Methods}
+We plan to compare the following methods:
+\begin{enumerate}[leftmargin=1.5em]
+    \item \textbf{Always-accept baseline (Top-1).} The system always returns the highest-scoring candidate without abstention.
+    \item \textbf{Naive reward-threshold baseline.} The system returns the top candidate only if its reward score exceeds a fixed threshold chosen by a simple validation-based rule, such as a score quantile.
+    \item \textbf{Conformal heuristic-score baseline.} We will also consider a conformal variant that uses a generator-side heuristic score rather than a learned reward model for selection or acceptance. The precise specification of this score will be refined in later stages of the project.
+\end{enumerate}
+
+
+\subsection{Models}
+
+We do not plan to train a large diffusion model from scratch. Instead, we will build our experiments around a pretrained open text-to-image generator, likely an SDXL-like model \citep{podell2023sdxl}. SDXL is a strong open latent diffusion model with a large UNet backbone of roughly 2.6B parameters, together with enhanced text conditioning through two text encoders and a larger cross-attention context. These features make it a strong candidate for high-quality text-to-image generation and improved prompt alignment relative to earlier Stable Diffusion variants. Using such a pretrained generator allows us to focus on selective generation, scoring, and abstention, while leaving the final generator choice to later stages of the project based on available compute and experimental needs.
+
+As the primary selection model, we plan to use \textbf{PickScore}, a pretrained preference-based scoring model finetuned from CLIP-H on the Pick-a-Pic dataset. PickScore assigns scalar scores to prompt-image pairs and is designed to reflect human preferences over generated images, making it a natural choice for ranking candidate outputs and supporting the acceptance decision in our framework.
+
+For final evaluation, we plan to use a separate external scorer, with \textbf{ImageReward} as the primary choice. ImageReward is a general-purpose text-to-image human preference reward model built to approximate human judgments from large-scale expert comparisons. Using a separate evaluation model helps reduce circular evaluation and provides a more meaningful proxy for latent image quality when direct human annotations are unavailable.
+
+
+\subsection{Dataset}
+
+We use a publicly available human-preference dataset for text-to-image generation, with \textbf{Pick-a-Pic} \citep{kirstain2023pick} as our primary choice. The dataset contains text prompts, generated images, and human preference annotations indicating which image is preferred within a prompt-conditioned comparison. It is well suited to our setting because it directly captures human judgments of image quality and prompt alignment.
+In our experiments, the prompts serve as inputs to a pretrained text-to-image generator \(G\), such as Stable Diffusion or SDXL, which produces multiple candidate images for each prompt. The human preference annotations are used to define or validate the quality signal that underlies our selective generation framework.
+
+\subsection{Evaluation Metrics}
+
+Our primary objective is to evaluate the quality of the images returned by the selective generation rule in \eqref{eq:target_coverage}. We report two metrics:
+\[
+\mathrm{SelQual}
+=
+\frac{\sum_{i=1}^n R_i Y_i}{\sum_{i=1}^n R_i},
+\quad
+\mathrm{AccRate}
+=
+\frac{1}{n}\sum_{i=1}^n R_i.
+\]
+Here, \(\mathrm{SelQual}\) is the empirical fraction of accepted images that are judged to be good, while \(\mathrm{AccRate}\) is the fraction of prompts for which the system returns an image. We consider these two metrics jointly as selective quality can be trivially increased by abstaining more often, so it is important to report the acceptance rate alongside it. Ideally, a strong method should achieve high selective quality while maintaining a nontrivial acceptance rate. Nevertheless, selective quality remains our primary metric, since the main objective of the proposed method is to ensure the reliability of returned images rather than to maximize acceptance at all costs.
+
+\subsection{Expected Outcomes}
+
+We will evaluate the proposed method using \(\mathrm{SelQual}\) and \(\mathrm{AccRate}\), and compare it with the baseline methods introduced above. Our main hypothesis is that the proposed calibration procedure will control the selective risk so that the quality of accepted outputs remains above the target level \(1-\alpha\). Empirically, this should be reflected in \(\mathrm{SelQual}\) being close to or above \(1-\alpha\) on held-out data.
+
+We will further compare multiple base generative models of varying quality, e.g., models trained for different numbers of epochs or with different architectures. We expect the $\mathrm{SelQual}$ guarantee to hold across all models after calibration, while stronger base models, whose outputs better align with human preferences, should achieve higher \(\mathrm{AccRate}\). Thus, selective quality reflects reliability, while acceptance rate captures the quality of the underlying generator.
+
+% \subsection{Experimental details}
+% \mx{we can skip this part, if this is mentioned in previous sections, or use minimum length for this}
+% \begin{minxing}
+% \textbf{Some details on constructing the ground truth label we discussed, this is more related to modeling details, I think we can defer it to the experimental details part, no need to say this in the method section, it will deviate from the focus: }
+%     \begin{remark}[Constructing the quality label $Y$]
+% A central modeling issue is how to define whether a generated image is ``good.'' Because the images in our task are generated on the fly, standard dataset labels are typically unavailable. We therefore require a mechanism that can assign a quality score to each generated prompt-image pair $(x,I)$.
+
+% A natural choice is an external evaluation model $S_{\mathrm{eval}}(x,I)$, which outputs a scalar score intended to reflect human preference or prompt-image quality. This external score can be used as a proxy ground truth for evaluation. For instance, one may define
+% \[
+% Y(x,I)=\mathbf{1}\{S_{\mathrm{eval}}(x,I)\ge q\},
+% \]
+% where $q$ is a prescribed threshold, such as a validation-set quantile. Alternatively, one may retain $S_{\mathrm{eval}}(x,I)$ itself as a continuous-valued quality variable.
+
+% The key point is that $S_{\mathrm{eval}}$ should be external to the selection rule used by the method. This separation avoids circular evaluation and provides a more meaningful assessment of whether the accepted images are truly of high quality.
+% \end{remark}
+% Importantly, we distinguish the \emph{selection score} used to rank candidates from the \emph{evaluation score} used for final assessment. This separation avoids circular evaluation and allows us to test whether the proposed abstention rule generalizes beyond the particular scoring model used at inference time.
+% \end{minxing}
+
+% % \section{Expected Outcomes}
+% % \TODO{circle back to the evaluation metrics, compare with baseline methods, expectation.}
+
+% % Our main hypothesis is that \textbf{abstention can substantially improve the quality of delivered images}. More specifically, we expect:
+
+% % \begin{enumerate}[leftmargin=1.5em]
+% %     \item \textbf{Selective generation will outperform always-accept generation} on selective quality and external evaluation score.
+    
+% %     \item \textbf{Conformal abstention will produce a more stable and interpretable threshold} than naive score thresholding, especially when moving across prompts of varying difficulty.
+    
+% %     \item \textbf{Generating multiple candidates} ($K>1$) will improve performance, since the system can choose the best candidate before deciding whether to abstain.
+    
+% %     \item There will be a clear \textbf{quality-coverage tradeoff}: stricter thresholds will improve quality among accepted images but reduce the acceptance rate.
+% % \end{enumerate}
+
+% % The main experiments we plan to run are:
+
+% % \begin{itemize}[leftmargin=1.5em]
+% %     \item Compare always-accept, naive thresholding, and conformal abstention.
+% %     \item Vary the number of candidates $K \in \{1, 2, 4, 8\}$.
+% %     \item Compare different selection scorers, such as PickScore and ImageReward.
+% %     \item Evaluate with a held-out external scorer and, if feasible, a small manual human evaluation.
+% % \end{itemize}
+
+% % Even if the final conformal method does not dramatically outperform simpler baselines, we expect the project to provide useful insight into how uncertainty calibration ideas can be adapted to open-ended generative tasks.
+
+
+
+\section{Contribution.}
+Our key contribution is a \textbf{methodological and theoretical} framework for selective text-to-image generation. Rather than introducing a new generative architecture, we propose a plug-and-play abstention mechanism that can be combined with any pretrained generator and reward model. The method is \textit{distribution-free} and \textit{model-free}, using conformal calibration to decide whether to return the top-ranked candidate or abstain. This yields a practical framework for human-preference-aligned generation with a formal quality guarantee on accepted outputs. We evaluate the method against simple baselines and across base generators of varying quality.
+
+\section{Plan}
+
+\subsection{Division of Work}
+
+\begin{center}
+\begin{tabular}{p{0.15\linewidth}p{0.8\linewidth}}
+\toprule
+\textbf{Role} & \textbf{Primary Responsibilities} \\
+\midrule
+Role 1 & Conformal calibration method and scoring. \\
+Role 2 & Generative model pipeline and candidate generation. \\
+Role 3 & Data processing, experiment design \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Project Timeline}
+
+\begin{itemize}[leftmargin=1.2em]
+    \item \textbf{Apr.~4--6:} Dataset setup, prompt preprocessing, and generation pipeline setup.
+    \item \textbf{Apr.~7--9:} Scorer integration, Top-1 and naive-threshold baselines, and pilot runs.
+    \item \textbf{Apr.~10--13:} Initial conformal prototype, baseline comparisons, preliminary figures/tables, and reproduction of a basic reward-based filtering result.
+    \item \textbf{Apr.~14--21:} Refine experiments based on feedback and failure cases, expand comparisons.
+    \item \textbf{Apr.~22--26:} Finalize presentation-ready results and prepare poster figures and key findings.
+    \item \textbf{Apr.~27--30:} Complete remaining ablations, finalize analysis, and polish the final report.
+\end{itemize}
+
+The team will collaborate on result analysis and writing, and will jointly review the core calibration and evaluation components.
+
+
+\newpage
+% References
+\bibliographystyle{plainnat}  % Choose a bibliography style (e.g., plainnat, abbrvnat)
+\bibliography{ref}     % Add your .bib file here
+
+% \appendix
+
+% \section{Example Appendix}
+% \label{sec:appendix}
+
+% This is an appendix.
+
+\end{document}

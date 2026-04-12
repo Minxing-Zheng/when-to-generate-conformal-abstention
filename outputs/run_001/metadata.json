@@ -1,0 +1,17 @@
+{
+  "generator": "stabilityai/sdxl-turbo",
+  "num_inference_steps": 1,
+  "guidance_scale": 0.0,
+  "resolution": 512,
+  "K": 4,
+  "num_prompts": 500,
+  "start_idx": 0,
+  "prompts_file": "data/prompts.json",
+  "selection_scorer": "ImageReward-v1.0",
+  "eval_scorer": "PickScore_v1",
+  "base_seed": 42,
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "total_wall_clock_sec": 362.9,
+  "total_generation_sec": 85.3,
+  "total_scoring_sec": 70.6
+}
