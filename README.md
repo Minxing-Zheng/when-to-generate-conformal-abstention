@@ -181,9 +181,13 @@ Each line is one prompt (Person 2: this is your primary input):
   "image_reward_scores": [0.58, 0.27, -1.41, -2.03],
   "image_reward_rankings": [1, 2, 3, 4],
   "pickscore_scores": [21.3, 20.8, 19.2, 18.9],
+  "self_clip_scores": [0.318, 0.256, 0.277, 0.241],
+  "latent_norms": [105.1, 107.2, 79.3, 75.9],
   "top1_idx": 0,
   "top1_image_reward": 0.58,
   "top1_pickscore": 21.3,
+  "top1_self_clip": 0.318,
+  "top1_latent_norm": 105.1,
   "image_paths": ["images/0000_k0.png", ...],
   "generation_time_sec": 0.8,
   "scoring_time_sec": 1.2
@@ -193,6 +197,8 @@ Each line is one prompt (Person 2: this is your primary input):
 Key fields for Person 2:
 - `image_reward_scores`: all K scores from the selection scorer -- use these for threshold/conformal calibration
 - `pickscore_scores`: all K scores from the evaluation scorer -- use these to compute SelQual
+- `self_clip_scores`: all K cosine similarities in the CLIP-L embedding space (same encoder SDXL uses for conditioning) -- a **generator-internal** heuristic, useful as a self-score baseline for conformal prediction
+- `latent_norms`: all K L2 norms of the final denoised latents -- a **purely internal** signal, no external model involved
 - `top1_idx`: which candidate was selected by ImageReward (baseline)
 
 ---

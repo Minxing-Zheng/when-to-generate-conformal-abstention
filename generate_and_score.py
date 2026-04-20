@@ -70,6 +70,29 @@ def score_pickscore_batch(prompt, images, ps_model, ps_processor, device="cuda")
     return scores.cpu().tolist()
 
 
+def load_self_clip(device="cuda"):
+    """CLIP-L: same model weights SDXL uses for text conditioning."""
+    from transformers import CLIPModel, CLIPProcessor
+    processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
+    model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14").eval().to(device)
+    return model, processor
+
+
+def score_self_clip_batch(prompt, images, clip_model, clip_processor, device="cuda"):
+    """Self-CLIP score: cosine similarity in CLIP-L embedding space (same space SDXL is conditioned on)."""
+    image_inputs = clip_processor(images=images, return_tensors="pt").to(device)
+    text_inputs = clip_processor(
+        text=prompt, return_tensors="pt", padding=True, truncation=True, max_length=77
+    ).to(device)
+    with torch.no_grad():
+        img_embs = clip_model.get_image_features(**image_inputs)
+        img_embs = img_embs / img_embs.norm(dim=-1, keepdim=True)
+        txt_embs = clip_model.get_text_features(**text_inputs)
+        txt_embs = txt_embs / txt_embs.norm(dim=-1, keepdim=True)
+        scores = (txt_embs @ img_embs.T)[0]  # raw cosine similarity
+    return scores.cpu().tolist()
+
+
 def main():
     args = parse_args()
 
@@ -91,6 +114,7 @@ def main():
     pipe = load_generator()
     ir_model = load_image_reward()
     ps_model, ps_processor = load_pickscore()
+    clip_model, clip_processor = load_self_clip()
     print(f"Models loaded in {time.time() - t0:.1f}s")
     print(f"GPU mem: {torch.cuda.memory_allocated() / 1024**3:.2f}GB")
 
@@ -103,7 +127,12 @@ def main():
         for i, prompt in enumerate(tqdm(prompts, desc="Processing")):
             prompt_idx = args.start_idx + i
             try:
-                # Generate K images
+                # Generate K images; capture final latents via callback for latent_norm self-score
+                final_latents = {}
+                def capture_latents(p, step, timestep, kwargs):
+                    final_latents["z"] = kwargs["latents"].detach()
+                    return kwargs
+
                 t_gen = time.time()
                 generators = [
                     torch.Generator(device="cuda").manual_seed(args.seed + prompt_idx * args.K + k)
@@ -116,9 +145,14 @@ def main():
                     height=512,
                     width=512,
                     generator=generators,
+                    callback_on_step_end=capture_latents,
+                    callback_on_step_end_tensor_inputs=["latents"],
                 ).images
                 gen_time = time.time() - t_gen
                 total_gen_time += gen_time
+
+                # Latent norm: L2 norm per candidate (truly generator-internal "self" signal)
+                latent_norms = final_latents["z"].flatten(1).norm(dim=1).cpu().tolist()
 
                 # Score with ImageReward (all K)
                 t_score = time.time()
@@ -127,6 +161,10 @@ def main():
 
                 # Score with PickScore (all K, batch)
                 ps_scores = score_pickscore_batch(prompt, images, ps_model, ps_processor)
+
+                # Self-CLIP score (CLIP-L, same weights SDXL uses for text conditioning)
+                self_clip_scores = score_self_clip_batch(prompt, images, clip_model, clip_processor)
+
                 score_time = time.time() - t_score
                 total_score_time += score_time
 
@@ -149,9 +187,13 @@ def main():
                     "image_reward_scores": ir_scores,
                     "image_reward_rankings": ir_rankings,
                     "pickscore_scores": ps_scores,
+                    "self_clip_scores": self_clip_scores,
+                    "latent_norms": latent_norms,
                     "top1_idx": top1_idx,
                     "top1_image_reward": ir_scores[top1_idx],
                     "top1_pickscore": ps_scores[top1_idx],
+                    "top1_self_clip": self_clip_scores[top1_idx],
+                    "top1_latent_norm": latent_norms[top1_idx],
                     "image_paths": image_paths,
                     "generation_time_sec": round(gen_time, 3),
                     "scoring_time_sec": round(score_time, 3),
@@ -199,6 +241,7 @@ def main():
         "prompts_file": args.prompts_file,
         "selection_scorer": "ImageReward-v1.0",
         "eval_scorer": "PickScore_v1",
+        "self_scorers": ["self_clip (openai/clip-vit-large-patch14)", "latent_norm"],
         "base_seed": args.seed,
         "gpu": torch.cuda.get_device_name(0),
         "total_wall_clock_sec": round(wall_total, 1),
