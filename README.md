@@ -113,12 +113,22 @@ Otherwise it defaults to `~/.cache/ImageReward/` which is on `/jet/home/` and wi
 
 ## 3. Code Files
 
+### Generation and scoring (Tianyang)
+
 | File | Purpose |
 |------|---------|
 | `setup_env.sh` | One-shot environment creation script. Installs all dependencies in correct order. Edit the paths at the top to match your `PROJECT_DIR`. |
 | `prepare_prompts.py` | Extracts unique prompts from Pick-a-Pic dataset (`yuvalkirstain/PickaPic-rankings`), filters by token length (default: <=35 tokens, the ImageReward limit), and saves to local JSON. Only needs to run once. |
-| `generate_and_score.py` | Main pipeline. Loads SDXL-Turbo + ImageReward + PickScore onto one GPU (~12GB VRAM). For each prompt: generates K images, scores all K with both scorers, selects top-1 by ImageReward, saves images + scores to JSONL. Supports resume via `--start_idx`. Edit `PROJECT_DIR` and `IR_CACHE` at the top to match your paths. |
+| `generate_and_score.py` | Main pipeline. Loads SDXL-Turbo + ImageReward + PickScore + CLIP-L onto one GPU (~13GB VRAM). For each prompt: generates K images, scores all K with all scorers, selects top-1 by ImageReward, saves images + scores to JSONL. Supports resume via `--start_idx`. Edit `PROJECT_DIR` and `IR_CACHE` at the top to match your paths. |
 | `analyze_results.py` | Post-hoc analysis. Computes SelQual and AccRate at multiple PickScore thresholds (P10 through P90). Outputs score distributions, LaTeX table row, and `analysis.json`. |
+| `upload_to_hf.py` | Packages an experiment run into `images.tar.gz` and uploads it together with `results.jsonl` and `metadata.json` to a HuggingFace dataset repo. Requires `HF_TOKEN` in `.env`. |
+
+### Conformal calibration (Minxing)
+
+| File | Purpose |
+|------|---------|
+| `conformal_pipeline/conformal_utils.py` | Core conformal calibration utilities. Loads the cached scores from the HuggingFace dataset, builds prompt-level calibration tuples, computes selective-risk upper-confidence bounds (Hoeffding / KL), and selects the conformal threshold. Also implements the heuristic threshold baselines (raw / z-score / margin / softmax). |
+| `conformal_pipeline/conformal_modeling.ipynb` | End-to-end notebook that runs the full conformal evaluation: downloads the dataset, calibrates thresholds across repeated trials, computes AccRate / SelAccuracy / empirical guarantee, and generates the figures and tables in the report. |
 
 ---
 
@@ -207,41 +217,45 @@ Key fields for Person 2:
 
 ```
 when-to-generate-conformal-abstention/
-  # --- Code (in git) ---
+  # --- Generation / scoring code (in git) ---
   generate_and_score.py     # Main entry point: generate images + score
   prepare_prompts.py        # Data preparation (already run, see data/)
-  analyze_results.py        # Result analysis
+  analyze_results.py        # Top-1 baseline analysis
+  upload_to_hf.py           # Upload an experiment run to HuggingFace
   setup_env.sh              # Environment setup script
   requirements.txt          # pip freeze of the working environment
   conda-env-export.txt      # conda environment export
+
+  # --- Conformal calibration code (in git) ---
+  conformal_pipeline/
+    conformal_utils.py        # Core calibration + heuristic baselines
+    conformal_modeling.ipynb  # End-to-end conformal evaluation notebook
+
+  # --- Documentation (in git) ---
   CLAUDE.md                 # Claude Code config
   README.md                 # This file
+  project.md                # Course project guidelines
+  proposal.tex              # Project proposal
+  genai-project-role-assignment.md  # Role assignments
 
   # --- Data (in git) ---
   data/
     prompts.json            # 5000 prompts, <=35 tokens each
 
-  # --- Documentation (in git) ---
-  project.md                # Course project guidelines
-  proposal.tex              # Project proposal
-  genai-project-role-assignment.md  # Role assignments
-
-  # --- Experiment results (JSON in git, images NOT in git) ---
+  # --- Experiment results (JSON in git, images NOT in git; full data on HF) ---
   outputs/
-    run_001/                # Baseline: 500 prompts, K=4, 1 inference step
-      results.jsonl         #   Per-prompt scores (in git)
-      metadata.json         #   Run config and timing (in git)
-      analysis.json         #   SelQual at various thresholds (in git)
-      images/               #   2000 PNG files, ~721MB (NOT in git)
-    run_steps4/             # Comparison: 500 prompts, K=4, 4 inference steps
+    run_k10_3000/           # Main run: 3000 prompts, K=10, 1 inference step
       results.jsonl
       metadata.json
-      analysis.json
-      images/               #   (NOT in git)
+      images/               # 30000 PNG files (NOT in git, see HF dataset)
 
   # --- Ignored ---
   logs/                     # Slurm job logs
+  .env                      # HF_TOKEN secret
 ```
+
+The full image dataset (`images.tar.gz`) is hosted on HuggingFace at
+[`tyzhou42/when-to-generate`](https://huggingface.co/datasets/tyzhou42/when-to-generate).
 
 ### Models used
 
@@ -250,9 +264,10 @@ when-to-generate-conformal-abstention/
 | Generator | `stabilityai/sdxl-turbo` | ~2.6B | ~6.6GB (fp16) |
 | Selection scorer | `ImageReward-v1.0` (THUDM) | ~1.1B | ~1.7GB |
 | Evaluation scorer | `yuvalkirstain/PickScore_v1` (CLIP ViT-H) | ~1B | ~3.7GB |
-| **Total** | | | **~12GB** |
+| Self-CLIP scorer | `openai/clip-vit-large-patch14` | ~430M | ~1.6GB |
+| **Total** | | | **~13GB** |
 
-All three models load simultaneously on a single H100 (80GB).
+All four models load simultaneously on a single H100 (80GB).
 
 ---
 
